@@ -3,9 +3,9 @@
   "version": "1.0.0",
   "description": "Event Network Generator",
   "scripts": {
-    "dev": "pip install -r requirements.txt && streamlit run event_net_gen.py --server.port 3000 --server.address 0.0.0.0",
-    "build": "echo 'No build step required'",
-    "start": "pip install -r requirements.txt && streamlit run event_net_gen.py --server.port 3000 --server.address 0.0.0.0",
+    "dev": "curl -sS https://bootstrap.pypa.io/get-pip.py | python3 && python3 -m pip install -q -r requirements.txt && python3 -m streamlit run event_net_gen.py --server.port 3000 --server.address 0.0.0.0 --server.enableCORS false --server.enableXsrfProtection false",
+    "build": "curl -sS https://bootstrap.pypa.io/get-pip.py | python3 && python3 -m pip install -q -r requirements.txt",
+    "start": "python3 -m streamlit run event_net_gen.py --server.port 3000 --server.address 0.0.0.0 --server.enableCORS false --server.enableXsrfProtection false",
     "lint": "echo 'No lint step required'"
   },
   "dependencies": {}

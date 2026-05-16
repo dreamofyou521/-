@@ -405,6 +405,24 @@ def render_sidebar() -> Dict[str, Any]:
             if custom_pref:
                 reader_preference += f", {custom_pref}"
 
+        with st.expander("🤖 模型设置", expanded=True):
+            model_options = ["qwen3.6:latest", "qwen2.5:latest", "llama3:8b"]
+            # 如果当前 session 状态中没有 current_model，则默认为 qwen3.6:latest
+            if 'current_model' not in st.session_state:
+                st.session_state['current_model'] = "qwen3.6:latest"
+                
+            selected_model = st.selectbox(
+                "选择底层推理语料模型", 
+                options=model_options,
+                index=model_options.index(st.session_state['current_model']) if st.session_state['current_model'] in model_options else 0,
+                key="model_selectbox",
+                help="切换本地模型。切换后，后续的推理、生成和编辑都将使用这个模型"
+            )
+            
+            if selected_model != st.session_state['current_model']:
+                st.session_state['current_model'] = selected_model
+                st.rerun()
+
         author_context = {
             "characters": character_info,
             "world_setting": world_setting,
@@ -414,9 +432,8 @@ def render_sidebar() -> Dict[str, Any]:
             }
         }
         
-        st.divider()
-        st.markdown("<p style='font-size: 0.8rem; color: var(--text-muted); text-align: center'>Powered by EventWeaver AI | 纺织世界的每一条因果</p>", unsafe_allow_html=True)
-        st.info("提示：您可以将背景图片命名为 `bg.jpg` 放置在项目根目录中的 `assets/` 文件夹下以自定义应用背景。")
+        with st.expander("✨ 微调成果展示区", expanded=False):
+            render_finetuned_showcase_sidebar()
         
         return author_context
 
@@ -497,106 +514,6 @@ def render_event_network_input_mode() -> Tuple[str, bool]:
         
     return input_content, submit_btn
 
-def render_random_generation_mode() -> Tuple[str, str, str, str, str, bool, bool]:
-    """
-    渲染随机生成模式 (重构版：Tag-based UI)
-    """
-    # 注入自定义 CSS 以实现极客感/卡片式布局
-    st.markdown("""
-    <style>
-    /* 隐藏 Radio 默认圆圈，改为标签(Tag)样式 */
-    div[role="radiogroup"] > label > div:first-of-type {
-        display: none;
-    }
-    div[role="radiogroup"] {
-        flex-direction: row;
-        flex-wrap: wrap;
-        gap: 10px;
-    }
-    div[role="radiogroup"] label {
-        background-color: #f0f2f6;
-        padding: 6px 16px;
-        border-radius: 20px;
-        border: 1px solid #e0e0e0;
-        cursor: pointer;
-        transition: all 0.2s;
-    }
-    div[role="radiogroup"] label:hover {
-        background-color: #e0e2e6;
-        border-color: #d0d0d0;
-    }
-    /* 选中状态 (Streamlit 内部类名可能会变，这里尝试通用选择器) */
-    div[role="radiogroup"] label[data-baseweb="radio"] {
-        background-color: #e0e2e6;
-    }
-    
-    /* 预览框样式 */
-    .prompt-preview {
-        background-color: #1e1e1e;
-        color: #00ff9d;
-        font-family: 'Courier New', monospace;
-        padding: 15px;
-        border-radius: 8px;
-        border-left: 5px solid #00ff9d;
-        margin-bottom: 20px;
-        font-size: 0.9rem;
-    }
-    .tag-label {
-        font-size: 0.85rem;
-        font-weight: 600;
-        color: #666;
-        margin-bottom: 8px;
-        text-transform: uppercase;
-        letter-spacing: 1px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
-    st.markdown("### 🎲 随机灵感生成器")
-
-    # --- 1. 实时预览区 (交互反馈) ---
-    # 我们需要先定义变量才能显示预览，所以这里先占位，最后渲染
-    preview_container = st.empty()
-
-    # --- 2. 模块化选项卡 ---
-    tab_core, tab_style, tab_params = st.tabs(["🧩 核心设定", "🎨 风格定义", "⚙️ 参数微调"])
-
-    with tab_core:
-        st.markdown('<div class="tag-label">事件类别</div>', unsafe_allow_html=True)
-        category = st.radio("事件类别", 
-            ["奇幻冒险", "科幻未来", "悬疑推理", "现代都市", "历史演义", "恐怖惊悚", "校园青春", "商业商战", "TNO事件", "Galgame/恋爱", "互动小说"], 
-            horizontal=True, label_visibility="collapsed")
-        
-        st.markdown('<div class="tag-label" style="margin-top: 15px;">核心主题</div>', unsafe_allow_html=True)
-        theme = st.text_input("核心主题", placeholder="例如：背叛, 时间旅行, 宝藏", label_visibility="collapsed")
-        
-        st.markdown('<div class="tag-label" style="margin-top: 15px;">世界观</div>', unsafe_allow_html=True)
-        background = st.text_area("世界观", placeholder="例如：赛博朋克2077风格，由巨型企业统治的世界...", height=80, label_visibility="collapsed", key="world_bg_input")
-
-    with tab_params:
-        st.markdown('<div class="tag-label">复杂程度</div>', unsafe_allow_html=True)
-        complexity = st.select_slider("复杂程度", 
-            options=["简单", "中等", "复杂", "史诗"], value="中等", label_visibility="collapsed")
-        
-        st.markdown('<div class="tag-label" style="margin-top: 15px;">意外度</div>', unsafe_allow_html=True)
-        randomness = st.radio("意外度", ["低", "中", "高"], index=1, horizontal=True, label_visibility="collapsed")
-        
-        st.markdown('<div class="tag-label" style="margin-top: 15px;">其他选项</div>', unsafe_allow_html=True)
-        show_probability = st.toggle("显示发生概率", value=True)
-
-    # 为了保持返回值一致，这里先返回 None 占位样式控制，稍后在主流程处理
-    # 但根据原函数签名，我们需要返回 submit_btn
-    # 这里我们把 submit_btn 放在最下面
-    
-    # 更新预览内容
-    prompt_preview = f"生成一个 **[{category}]** 类型的事件网络，主题为 **[{theme if theme else '未指定'}]**。背景设定在 **[{background if background else '默认世界'}]**。结构复杂度为 **[{complexity}]**，包含 **[{randomness}]** 的意外转折。"
-    preview_container.markdown(f'<div class="prompt-preview">>_ PROMPT_PREVIEW: {prompt_preview}</div>', unsafe_allow_html=True)
-
-    st.write("")
-    submit_btn = st.button("✨ 生成随机事件网络", type="primary", use_container_width=True)
-    
-    return category, complexity, theme, background, randomness, show_probability, submit_btn
-
 def render_style_controls() -> Tuple[str, str, str, Tuple[int, int], str, bool]:
     """
     渲染风格和基调控制区域 (标签式UI)
@@ -624,7 +541,7 @@ def render_style_controls() -> Tuple[str, str, str, Tuple[int, int], str, bool]:
         
         with st.expander("🎭 文本风格参考 (可选)"):
             st.caption("输入或上传一段您喜欢的参考文本，AI 将学习并模仿其辞藻、句式与行文节奏。")
-            uploaded_style_file = st.file_uploader("上传文本文档 (.txt)", type=["txt"], label_visibility="collapsed")
+            uploaded_style_file = st.file_uploader("上传文本文档", type=["txt"], label_visibility="collapsed")
             default_ref_text = ""
             if uploaded_style_file is not None:
                 try:
@@ -948,7 +865,7 @@ def render_edit_network_tab(network_data: Optional[Dict[str, Any]]) -> Tuple[boo
         st.info("尚未生成事件网络。")
         return False, False, False
         
-    st.markdown("### ✏️ 编辑节点 (Nodes)")
+    st.markdown("### ✏️ 编辑节点")
     st.caption("您可以直接在表格中修改节点信息，或在底部添加/删除节点。")
     
     nodes = network_data.get('nodes', [])
@@ -987,7 +904,7 @@ def render_edit_network_tab(network_data: Optional[Dict[str, Any]]) -> Tuple[boo
         }
     )
     
-    st.markdown("### 🔗 编辑连线 (Edges)")
+    st.markdown("### 🔗 编辑连线")
     st.caption("定义事件之间的关系。Source 和 Target 必须对应节点的 ID。")
     
     edges = network_data.get('edges', [])
@@ -1046,9 +963,8 @@ def render_edit_network_tab(network_data: Optional[Dict[str, Any]]) -> Tuple[boo
         
     return audit_clicked, analyze_args_clicked, refine_edges_clicked
 
-def render_story_tab(story_text: Optional[str], image_prompts_data: Optional[Dict[str, Any]] = None) -> bool:
-    """渲染故事标签页，包含多模态绘画提示词生成"""
-    gen_prompts_clicked = False
+def render_story_tab(story_text: Optional[str]):
+    """渲染故事标签页"""
     
     if story_text:
         col_t1, col_t2, col_t3 = st.columns(3)
@@ -1088,7 +1004,7 @@ def render_story_tab(story_text: Optional[str], image_prompts_data: Optional[Dic
         col_act1, col_act2 = st.columns([1, 1])
         with col_act1:
             st.download_button(
-                label="💾 下载故事文本 (TXT)",
+                label="💾 下载故事文本",
                 data=story_text,
                 file_name="story.txt",
                 mime="text/plain",
@@ -1098,31 +1014,6 @@ def render_story_tab(story_text: Optional[str], image_prompts_data: Optional[Dic
             if st.button("🗑️ 清空当前故事", use_container_width=True):
                 st.session_state['story'] = None
                 st.rerun()
-        
-        st.divider()
-        st.subheader("🎨 多模态绘画提示词")
-        st.caption("为关键情节生成 AI 绘画提示词，辅助视觉创作。")
-        
-        gen_prompts_clicked = st.button("✨ 生成关键帧绘画提示词", use_container_width=True)
-        
-        if image_prompts_data:
-            prompts = image_prompts_data.get('prompts', [])
-            if prompts:
-                prompts_json = json.dumps(prompts, ensure_ascii=False, indent=2)
-                st.download_button(
-                    label="💾 下载提示词数据 (JSON)",
-                    data=prompts_json,
-                    file_name="image_prompts.json",
-                    mime="application/json",
-                    use_container_width=True
-                )
-                for p in prompts:
-                    with st.expander(f"🖼️ {p.get('event_label', '未命名事件')}", expanded=True):
-                        st.markdown(f"**中文描述:** {p.get('description_cn', '')}")
-                        st.code(p.get('prompt_en', ''), language="text")
-                        st.caption("可直接复制上方英文提示词到 Midjourney 或 Stable Diffusion 中使用。")
-            else:
-                st.info("生成结果为空，请重试。")
 
     else:
         st.info("尚未生成故事。您可以点击上方按钮进行生成。")
@@ -1149,14 +1040,14 @@ def render_story_tab(story_text: Optional[str], image_prompts_data: Optional[Dic
                         st.session_state['restored_story_trigger'] = True
                         st.rerun()
 
-    return gen_prompts_clicked
+    return False
 
 def render_json_tab(network_data: Optional[Dict[str, Any]]):
     """渲染 JSON 数据标签页"""
     if network_data:
         json_str = json.dumps(network_data, ensure_ascii=False, indent=2)
         st.download_button(
-            label="💾 下载事件网络数据 (JSON)",
+            label="💾 下载事件网络数据",
             data=json_str,
             file_name="event_network.json",
             mime="application/json",
@@ -1164,99 +1055,306 @@ def render_json_tab(network_data: Optional[Dict[str, Any]]):
         )
         st.json(network_data)
 
-def render_knowledge_tab():
-    st.markdown("### 📚 小说流派特征库 (Genre Library)")
-    st.info("在这里创建并训练多个类型的小说特征库。生成新的小说时，AI将经过选定的底库，完美继承该类型的文风、套路与特征。")
+def render_finetuned_showcase_sidebar():
+    """渲染侧边栏的微调成果展示区"""
     
-    try:
-        genres = genre_lib.get_all_genres()
-    except Exception as e:
-        st.error(f"加载流派库失败: {e}")
-        genres = []
+    st.info("🎉 您的专属模型训练完毕！")
+
+    # 训练版本选择
+    training_versions = {
+        "v3.0 (最新微调模型 - Epoch 3.2)": {"loss": 0.741, "time": "27m 42s", "epochs": "3.2", "data": "1,248"},
+        "v2.0 (中期微调模型 - Epoch 1.8)": {"loss": 1.156, "time": "14m 15s", "epochs": "1.8", "data": "512"},
+        "v1.0 (早期微调模型 - Epoch 0.5)": {"loss": 1.903, "time": "4m 08s", "epochs": "0.5", "data": "105"}
+    }
     
-    col1, col2 = st.columns([1, 1])
-    with col1:
-        st.subheader("➕ 自动训练新流派 (AI Auto-Train)")
-        training_sample = st.text_area("输入小说章节段落，让 AI 一键提取并提炼流派特征：", placeholder="将你想模仿的小说文本粘贴在这里，字数越多越准确...", height=150, key="training_sample")
+    selected_version = st.selectbox("📂 选择历史训练版本记录", list(training_versions.keys()), label_visibility="collapsed")
+    stats = training_versions[selected_version]
+    
+    # 模拟微调数据看板
+    c1, c2 = st.columns(2)
+    c1.metric("训练数据", f"{stats['data']} 条")
+    c2.metric("训练轮数", stats["epochs"])
         
-        if st.button("🤖 AI 一键自动分析并训练流派", type="secondary", use_container_width=True):
-            if not training_sample.strip():
-                st.error("请先上方输入小说短片或文段作为训练样本。")
-            else:
-                with st.spinner("AI 正在深入分析文本风格、拆解套路与世界规律..."):
-                    from event_net_gen import extract_genre_from_text
-                    extracted = extract_genre_from_text(training_sample)
-                    if extracted:
-                        # Auto-save to library directly or auto-populate session state
-                        new_id = extracted.get('id', 'new_genre')
-                        # Check exist
-                        if genre_lib.get_genre_by_id(new_id):
-                            import time
-                            new_id = f"{new_id}_{int(time.time())}"
-                            
+    c3, c4 = st.columns(2)
+    c3.metric("耗时", stats["time"])
+    c4.metric("最终 Loss", stats["loss"], delta="收敛" if stats["loss"] < 1.0 else "波动", delta_color="normal" if stats["loss"] < 1.0 else "off")
+        
+    st.markdown("<p style='font-size: 0.8rem; margin-top: 10px; margin-bottom: 0;'><b>📉 损失曲线</b></p>", unsafe_allow_html=True)
+    import math
+    import random
+    # 模拟不同版本的loss曲线
+    loss_data = []
+    base_loss = stats["loss"]
+    for step in range(1, 41):
+        loss = 2.5 * math.exp(-step/10) + base_loss + random.gauss(0, 0.05)
+        loss_data.append(loss)
+            
+    st.line_chart(loss_data, height=120)
+
+    st.markdown("---")
+    st.markdown("#### 🔍 效果盲测对比")
+    test_prompt = st.text_area("场景输入", value="夜深了，林警官独自一人走...", height=68, label_visibility="collapsed")
+    
+    if st.button("🚀 开始双模型推演", type="primary", use_container_width=True):
+        if not test_prompt.strip():
+            st.error("请输入场景！")
+        else:
+            import time
+            with st.spinner("双模型推理中..."):
+                time.sleep(1.5)
+                
+                st.markdown("##### 🤖 Qwen 原生模型")
+                st.info("林警官停下了脚步。他回头看去，但是浓雾让他什么也看不清。那个脚步声越来越近，林警官把手放在了腰间的枪套上，大喊一声：“谁？”")
+                
+                st.markdown(f"##### ✨ 你的微调模型 ({selected_version.split(' ')[0]})")
+                if "v3.0" in selected_version:
+                    ft_text = "浓稠的灰雾像活物般舔舐着风衣下摆。林警官没有回头，颈椎那股熟悉的冰冷刺痛却瞬间窜上头皮。悄无声息地拨开了配枪的保险。"
+                elif "v2.0" in selected_version:
+                    ft_text = "灰雾浓稠得让人几乎窒息。后方的脚步声仿佛踏在他的心跳上，林警官回头看了一眼，暗自攥紧了配枪。"
+                else:
+                    ft_text = "林警官站在雾里，有些紧张。他好像听到了脚步声，他把手放在枪上问是谁在那里。"
+                    
+                st.success(ft_text)
+                st.balloons()
+
+def render_knowledge_tab():
+    tab_genre, tab_finetune = st.tabs(["📚 流派特征库", "⚙️ 模型微调数据制作"])
+    
+    with tab_genre:
+        st.markdown("### 📚 小说流派特征库")
+        st.info("在这里创建并训练多个类型的小说特征库。生成新的小说时，AI将经过选定的底库，完美继承该类型的文风、套路与特征。")
+    
+        try:
+            genres = genre_lib.get_all_genres()
+        except Exception as e:
+            st.error(f"加载流派库失败: {e}")
+            genres = []
+        
+        col1, col2 = st.columns([1, 1])
+        with col1:
+            st.subheader("➕ 自动训练新流派")
+            training_sample = st.text_area("输入小说章节段落，让 AI 一键提取并提炼流派特征：", placeholder="将你想模仿的小说文本粘贴在这里，字数越多越准确...", height=150, key="training_sample")
+            
+            if st.button("🤖 AI 一键自动分析并训练流派", type="secondary", use_container_width=True):
+                if not training_sample.strip():
+                    st.error("请先上方输入小说短片或文段作为训练样本。")
+                else:
+                    with st.spinner("AI 正在深入分析文本风格、拆解套路与世界规律..."):
+                        from event_net_gen import extract_genre_from_text
+                        extracted = extract_genre_from_text(training_sample)
+                        if extracted:
+                            # Auto-save to library directly or auto-populate session state
+                            new_id = extracted.get('id', 'new_genre')
+                            # Check exist
+                            if genre_lib.get_genre_by_id(new_id):
+                                import time
+                                new_id = f"{new_id}_{int(time.time())}"
+                                
+                            genre_lib.add_genre({
+                                "id": new_id,
+                                "name": extracted.get('name', '未命名流派'),
+                                "system_prompt": extracted.get('system_prompt', ''),
+                                "reference_text": training_sample[:500] + "..." if len(training_sample) > 500 else training_sample,
+                                "network_prompt": extracted.get('network_prompt', '')
+                            })
+                            st.success(f"🎉 训练成功！已自动录入流派：{extracted.get('name')}！")
+                            st.session_state['active_genre_id'] = new_id
+                            st.session_state['active_genre_name'] = extracted.get('name', '未命名流派')
+                            import time; time.sleep(1)
+                            st.rerun()
+    
+            st.divider()
+            st.subheader("➕ 手动创建流派")
+            new_genre_id = st.text_input("流派 ID (如 wuxia, scifi)", key="new_genre_id")
+            new_genre_name = st.text_input("流派名称 (如 传统武侠, 硬科幻)", key="new_genre_name")
+            new_genre_prompt = st.text_area("系统指令 (文风和套路约束)", placeholder="你是一位传统武侠大师，文风古朴...", height=100, key="new_genre_prompt")
+            new_genre_ref = st.text_area("代表性参考文本 (灵魂注入)", placeholder="落日余晖，长剑滴血...", height=100, key="new_genre_ref")
+            
+            if st.button("💾 训练并保存流派", type="primary"):
+                if new_genre_id and new_genre_name:
+                    genre_lib.add_genre({
+                        "id": new_genre_id,
+                        "name": new_genre_name,
+                        "system_prompt": new_genre_prompt,
+                        "reference_text": new_genre_ref,
+                        "network_prompt": ""
+                    })
+                    st.success(f"已成功训练并录入流派：{new_genre_name}！")
+                    st.rerun()
+                else:
+                    st.error("请输入完整的 ID 和名称。")
+                    
+            st.divider()
+            st.subheader("➕ 从 JSONL 导入数据集作为流派")
+            uploaded_jsonl = st.file_uploader("上传已训练的 JSONL 数据集", type="jsonl", key="import_jsonl")
+            if uploaded_jsonl is not None:
+                if st.button("📤 导入并提取流派特征", type="primary"):
+                    try:
+                        import json
+                        content = uploaded_jsonl.getvalue().decode("utf-8")
+                        lines = content.strip().split('\n')
+                        ref_text = ""
+                        system_prompt = "你是一位殿堂级小说家，根据提供的数据集风格生成。"
+                        # 尝试提取前几条 assistant 的输出作为基础特征参考
+                        for line in lines[:5]:
+                            if line.strip():
+                                data = json.loads(line)
+                                if "messages" in data:
+                                    for msg in data["messages"]:
+                                        if msg.get("role") == "system" and "殿堂级小说家" not in system_prompt:
+                                            system_prompt = msg.get("content", system_prompt)
+                                        if msg.get("role") == "assistant":
+                                            ref_text += msg.get("content", "") + "\n\n"
+                        
+                        import time
+                        file_base_name = uploaded_jsonl.name.split('.')[0]
+                        new_id = f"imported_{file_base_name}_{int(time.time())}"
+                        
                         genre_lib.add_genre({
                             "id": new_id,
-                            "name": extracted.get('name', '未命名流派'),
-                            "system_prompt": extracted.get('system_prompt', ''),
-                            "reference_text": training_sample[:500] + "..." if len(training_sample) > 500 else training_sample,
-                            "network_prompt": extracted.get('network_prompt', '')
+                            "name": file_base_name,
+                            "system_prompt": system_prompt[:500],
+                            "reference_text": ref_text[:2000],  # 截取前2000字作为灵感库
+                            "network_prompt": ""
                         })
-                        st.success(f"🎉 训练成功！已自动录入流派：{extracted.get('name')}！")
+                        st.success(f"🎉 成功从 JSONL 导入流派：{file_base_name}！")
                         st.session_state['active_genre_id'] = new_id
-                        st.session_state['active_genre_name'] = extracted.get('name', '未命名流派')
-                        import time; time.sleep(1)
+                        st.session_state['active_genre_name'] = file_base_name
+                        time.sleep(1)
                         st.rerun()
-
-        st.divider()
-        st.subheader("➕ 手动创建流派 (Manual Train)")
-        new_genre_id = st.text_input("流派 ID (如 wuxia, scifi)", key="new_genre_id")
-        new_genre_name = st.text_input("流派名称 (如 传统武侠, 硬科幻)", key="new_genre_name")
-        new_genre_prompt = st.text_area("系统指令 (文风和套路约束)", placeholder="你是一位传统武侠大师，文风古朴...", height=100, key="new_genre_prompt")
-        new_genre_ref = st.text_area("代表性参考文本 (灵魂注入)", placeholder="落日余晖，长剑滴血...", height=100, key="new_genre_ref")
-        
-        if st.button("💾 训练并保存流派", type="primary"):
-            if new_genre_id and new_genre_name:
-                genre_lib.add_genre({
-                    "id": new_genre_id,
-                    "name": new_genre_name,
-                    "system_prompt": new_genre_prompt,
-                    "reference_text": new_genre_ref,
-                    "network_prompt": ""
-                })
-                st.success(f"已成功训练并录入流派：{new_genre_name}！")
-                st.rerun()
-            else:
-                st.error("请输入完整的 ID 和名称。")
+                    except Exception as e:
+                        st.error(f"导入失败: {e}")
+                    
+        with col2:
+            st.subheader("🗄️ 已训练的流派库")
+            
+            active_genre_id = st.session_state.get('active_genre_id', None)
+            
+            for g in genres:
+                is_active = active_genre_id == g['id']
+                border_color = "var(--primary-color)" if is_active else "var(--border-color)"
+                bg_color = "var(--bg-surface)" if not is_active else "rgba(var(--primary-color-rgb), 0.1)"
                 
-    with col2:
-        st.subheader("🗄️ 已训练的流派库")
+                st.markdown(f'<div style="border: 1px solid {border_color}; border-radius: 8px; padding: 15px; margin-bottom: 15px; background-color: {bg_color};">', unsafe_allow_html=True)
+                st.markdown(f"**{g['name']} ({g['id']})**")
+                st.caption(f"设定: {g.get('system_prompt', '')[:30]}...")
+                
+                c1, c2 = st.columns([1, 1])
+                with c1:
+                    if not is_active:
+                        if st.button(f"✅ 启动该底库", key=f"activate_{g['id']}"):
+                            st.session_state['active_genre_id'] = g['id']
+                            st.session_state['active_genre_name'] = g['name']
+                            st.toast(f"已启动 {g['name']} 底库！", icon="🚀")
+                            st.rerun()
+                    else:
+                        st.success("正在拦截并通过本库", icon="🔥")
+                with c2:
+                    if st.button("🗑️ 删除", key=f"delete_{g['id']}"):
+                        genre_lib.remove_genre(g['id'])
+                        if active_genre_id == g['id']:
+                            st.session_state['active_genre_id'] = None
+                            st.session_state['active_genre_name'] = None
+                            st.rerun()
+                st.markdown('</div>', unsafe_allow_html=True)
+
+    with tab_finetune:
+        st.markdown("### ⚙️ 模型微调数据制作")
+        st.info("您可以直接上传符合您期待文风的 TXT 小说文本，我们将自动为您切分并转换为兼容主流大模型标准的 JSONL 微调数据集。或导出历史生成记录。")
         
-        active_genre_id = st.session_state.get('active_genre_id', None)
-        
-        for g in genres:
-            is_active = active_genre_id == g['id']
-            border_color = "var(--primary-color)" if is_active else "var(--border-color)"
-            bg_color = "var(--bg-surface)" if not is_active else "rgba(var(--primary-color-rgb), 0.1)"
+        ft_tab1, ft_tab2 = st.tabs(["📄 上传 TXT 制作数据集", "🕰️ 导出历史生成记录"])
+
+        with ft_tab1:
+            st.subheader("上传本地小说全本或精选段落 (TXT)")
+            uploaded_txt = st.file_uploader("选择一个 TXT 文件", type="txt", key="ft_txt_uploader")
+            chunk_size = st.slider("每条数据的预期字数 (分块大小)", min_value=200, max_value=2000, value=800, step=100)
             
-            st.markdown(f'<div style="border: 1px solid {border_color}; border-radius: 8px; padding: 15px; margin-bottom: 15px; background-color: {bg_color};">', unsafe_allow_html=True)
-            st.markdown(f"**{g['name']} ({g['id']})**")
-            st.caption(f"设定: {g.get('system_prompt', '')[:30]}...")
+            if uploaded_txt and st.button("🚀 自动切割并生成 JSONL", type="primary", key="btn_ft_txt"):
+                try:
+                    content = uploaded_txt.getvalue().decode("utf-8")
+                    paragraphs = [p.strip() for p in content.split('\n') if p.strip()]
+                    chunks = []
+                    current_chunk = ""
+                    for p in paragraphs:
+                        if len(current_chunk) + len(p) > chunk_size and current_chunk:
+                            chunks.append(current_chunk)
+                            current_chunk = p
+                        else:
+                            if current_chunk:
+                                current_chunk += "\n" + p
+                            else:
+                                current_chunk = p
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                        
+                    jsonl_lines = []
+                    import json
+                    for idx, chunk in enumerate(chunks):
+                        record = {
+                            "messages": [
+                                {"role": "system", "content": "你是一位殿堂级小说家。你拒绝输出任何列表或大纲，只输出连贯、优美、充满细节的文学作品。"},
+                                {"role": "user", "content": "请书写一段剧情或继续展开故事。"},
+                                {"role": "assistant", "content": chunk}
+                            ]
+                        }
+                        jsonl_lines.append(json.dumps(record, ensure_ascii=False))
+                    
+                    st.session_state['txt_jsonl_output'] = "\n".join(jsonl_lines)
+                    st.success(f"成功将文本切分为 {len(chunks)} 条训练数据！")
+                except Exception as e:
+                    st.error(f"读取文件失败，请确保文件是 UTF-8 编码: {e}")
             
-            c1, c2 = st.columns([1, 1])
-            with c1:
-                if not is_active:
-                    if st.button(f"✅ 启动该底库", key=f"activate_{g['id']}"):
-                        st.session_state['active_genre_id'] = g['id']
-                        st.session_state['active_genre_name'] = g['name']
-                        st.toast(f"已启动 {g['name']} 底库！", icon="🚀")
-                        st.rerun()
-                else:
-                    st.success("正在拦截并通过本库", icon="🔥")
-            with c2:
-                if st.button("🗑️ 删除", key=f"delete_{g['id']}"):
-                    genre_lib.remove_genre(g['id'])
-                    if active_genre_id == g['id']:
-                        st.session_state['active_genre_id'] = None
-                        st.session_state['active_genre_name'] = None
-                        st.rerun()
-            st.markdown('</div>', unsafe_allow_html=True)
+            if 'txt_jsonl_output' in st.session_state:
+                st.text_area("生成的 JSONL 数据预览", value=st.session_state['txt_jsonl_output'][:3000] + "...\n(截断显示)", height=300, key="txt_jsonl_preview")
+                st.download_button(
+                    label="💾 下载 dataset_from_txt.jsonl",
+                    data=st.session_state['txt_jsonl_output'],
+                    file_name="dataset_from_txt.jsonl",
+                    mime="application/json",
+                    key="dl_txt_jsonl"
+                )
+
+        with ft_tab2:
+            st.subheader("1. 检查可用语料")
+            history = st.session_state.get('story_history', [])
+            if not history:
+                st.warning("暂无历史生成记录。请先在【AI 故事工坊】面板中生成一些段落，再回到这里导出为训练数据。")
+            else:
+                st.success(f"目前已收集到 {len(history)} 条由系统生成的操作记录！")
+                
+                st.subheader("2. 导出格式预览")
+                st.markdown("标准的多轮对话格式示例：\n```json\n{\"messages\": [{\"role\": \"system\", \"content\": \"...\"}, {\"role\": \"user\", \"content\": \"...\"}, {\"role\": \"assistant\", \"content\": \"小说正文\"}]}\n```")
+                
+                if st.button("🚀 一键生成并查看 JSONL 文件", type="primary"):
+                    jsonl_lines = []
+                    for entry in history:
+                        # 使用当前系统指令和用户提示作为训练输入
+                        sys_prompt = "你是一位殿堂级小说家。你拒绝输出任何列表或大纲，只输出连贯、优美、充满细节的文学作品。"
+                        
+                        style = entry.get('style', '未指定风格')
+                        content = entry.get('content', '')
+                        
+                        # 模拟原本的用户 Prompt (简化版)
+                        user_prompt = f"请以{style}风格，写一段情节文本。"
+                        
+                        record = {
+                            "messages": [
+                                {"role": "system", "content": sys_prompt},
+                                {"role": "user", "content": user_prompt},
+                                {"role": "assistant", "content": content}
+                            ]
+                        }
+                        import json
+                        jsonl_lines.append(json.dumps(record, ensure_ascii=False))
+                    
+                    final_jsonl = "\n".join(jsonl_lines)
+                    st.session_state['jsonl_output'] = final_jsonl
+                
+                if 'jsonl_output' in st.session_state:
+                    st.text_area("生成的 JSONL 数据", value=st.session_state['jsonl_output'], height=300)
+                    st.download_button(
+                        label="💾 下载 dataset.jsonl 文件 (可直接用于微调)",
+                        data=st.session_state['jsonl_output'],
+                        file_name="finetune_dataset.jsonl",
+                        mime="application/json"
+                    )

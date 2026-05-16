@@ -9,7 +9,7 @@ import ui_controller
 # --- 常量配置 ---
 DEFAULT_BASE_URL = "http://localhost:11434/v1"
 DEFAULT_API_KEY = "ollama"
-DEFAULT_MODEL_NAME = "qwen2.5:latest"
+DEFAULT_MODEL_NAME = "qwen3.6:latest"
 
 client = OpenAI(base_url=DEFAULT_BASE_URL, api_key=DEFAULT_API_KEY)
 
@@ -27,8 +27,9 @@ client = OpenAI(base_url=DEFAULT_BASE_URL, api_key=DEFAULT_API_KEY)
 def _call_llm_for_json(prompt):
     """通用 LLM 调用函数，返回 JSON"""
     try:
+        current_model = st.session_state.get('current_model', DEFAULT_MODEL_NAME)
         response = client.chat.completions.create(
-            model=DEFAULT_MODEL_NAME,
+            model=current_model,
             messages=[
                 {"role": "system", "content": "你是一个专业的叙事结构分析师和创意生成器。请只输出 JSON 数据。"},
                 {"role": "user", "content": prompt}
@@ -41,7 +42,7 @@ def _call_llm_for_json(prompt):
         return json.loads(content)
     except Exception as e:
         st.error(f"LLM 调用失败: {e}")
-        st.caption("提示: 请检查 Ollama 是否正在运行，以及模型名称是否正确。")
+        st.caption("提示: 请检查 Ollama 是否正在运行，以及模型是否有下载。您可以在左侧边栏更换模型版本。")
         return None
 
 def extract_genre_from_text(sample_text: str):
@@ -487,89 +488,6 @@ def parse_fast_outline_text(text: str):
                         })
     return {"nodes": nodes, "edges": edges}
 
-def generate_random_event_network(category, complexity, theme, background, randomness, show_probability):
-    """调用本地 LLM 随机生成事件网络"""
-    complexity_desc = {
-        "简单 (Simple)": "包含3-5个核心事件，单线叙事。",
-        "中等 (Medium)": "包含6-10个事件，双线交织。",
-        "复杂 (Complex)": "包含10-15个事件，多线网状结构。",
-        "史诗 (Epic)": "包含15+个事件，宏大叙事，涉及多个阵营。"
-    }
-    
-    randomness_desc = {
-        "低 (Low)": "逻辑严密，常规发展。",
-        "中 (Medium)": "包含1-2个意外转折。",
-        "高 (High)": "充满反转，情节跌宕起伏。"
-    }
-
-    prob_instruction = ""
-    if show_probability:
-        prob_instruction = "在每个节点的 description 中，包含该事件发生的概率（例如：'发生概率: 80%'）。"
-
-    prompt = f"""
-    请作为一个创意事件生成器，构建一个“事件网络”。
-    
-    【生成参数】：
-    - **类别**: {category}
-    - **复杂程度**: {complexity} ({complexity_desc.get(complexity, "")})
-    - **主题/关键词**: {theme}
-    - **背景设定**: {background}
-    - **随机性/意外度**: {randomness} ({randomness_desc.get(randomness, "")})
-    
-    【任务】：
-    1. 构思一系列相互关联的事件（节点）。简要标记它们（3-5个字）并提供详细描述。
-    2. {prob_instruction}
-    3. 定义事件之间的因果或时间关系（边）。
-    4. 对事件进行分类（铺垫 setup、冲突 conflict、高潮 climax、结局 resolution、调查 investigation、发现 discovery 或普通事件 event）。
-    
-    请务必只返回一个合法的 JSON 对象，不要包含 Markdown 格式（如 ```json ... ```），格式如下：
-    {{
-      "nodes": [
-        {{ "id": "1", "label": "事件名称", "description": "详细描述... (发生概率: 80%)", "type": "setup" }}
-      ],
-      "edges": [
-        {{ "source": "1", "target": "2", "label": "导致/引发" }}
-      ]
-    }}
-    """
-    return _call_llm_for_json(prompt)
-
-def generate_image_prompts(network, style, tone, author_context=None):
-    """调用本地 LLM 为关键事件生成图像提示词 (多模态支持)"""
-    # 筛选出关键事件 (如 climax, conflict, discovery)
-    key_events = [n for n in network.get('nodes', []) if n.get('type') in ['climax', 'conflict', 'discovery', 'prediction']]
-    if not key_events:
-        key_events = network.get('nodes', [])[:5] # 如果没有特定类型，取前5个
-        
-    events_json = json.dumps(key_events, ensure_ascii=False, indent=2)
-    
-    audience_instruction = ""
-    if author_context:
-        target_audience = author_context.get('target_audience', {})
-        audience_instruction = f"目标受众：{target_audience.get('age', '全年龄')}，偏好：{target_audience.get('preference', '无')}。请确保画面风格适合该受众（例如：儿童则色彩鲜艳，成人则更具艺术感）。"
-    
-    prompt = f"""
-    基于以下关键事件，为每个事件生成一个详细的 AI 绘画提示词 (Midjourney/Stable Diffusion 格式)。
-    
-    事件列表 (JSON):
-    {events_json}
-    
-    【要求】：
-    1. 风格：{style}
-    2. 氛围：{tone}
-    3. {audience_instruction}
-    4. 提示词结构：[主体描述], [环境/背景], [艺术风格/媒介], [光影/色彩], [画质修饰词]
-    5. 请为每个事件返回一个提示词，并用英文撰写提示词 (因为绘画模型通常对英文支持更好)，但附带中文说明。
-    
-    请务必只返回一个合法的 JSON 对象，格式如下：
-    {{
-      "prompts": [
-        {{ "event_id": "1", "event_label": "事件名", "prompt_en": "A cyberpunk detective standing in rain...", "description_cn": "赛博朋克侦探站在雨中..." }}
-      ]
-    }}
-    """
-    return _call_llm_for_json(prompt)
-
 def extract_network_from_nlp_jsonl(record_dict):
     """专门用于将 NLP 数据集格式转换为中文事件网络（纯 Python 极速模式，100% 结构准确，0 延迟）"""
     
@@ -792,11 +710,11 @@ def generate_stylized_text_stream(network, style, tone, author_context, target_w
        - 情感基调： "{tone}"
        - 叙事视角： "{pov}"
     5. **【核心字数约束】**： 
-       - 你的输出字数必须严格达到 **{target_word_count} 字** 左右。
-       - 如果目标字数较长，请充分展开环境描写、人物心理活动、对话和动作细节。
-       - 如果目标字数较短，请精炼语言，加快叙事节奏，只保留核心情节。
+       - 你的输出字数应尽量达到 **{target_word_count} 字** 左右。
+       - **重点警告：严禁为了凑字数而重复已经写过的废话或重复最后一段情节。** 如果字数不够，你必须**推演新的剧情**，引入新行为、新对白或新的场景，而不是在同一个画面里打转。
+       - 如果自然故事已经讲完并且实在无法继续，请直接自然点题结尾，宁可字数不足也【绝不可进入词语重复循环模式】。
     6. **【文章完整性强制指令】**：
-       - 输出必须是一篇**结构完整的正式小说/文章**，包含引人入胜的开头、连贯的主体和完整的结尾。
+       - 输出必须是一篇**结构完整的正式小说/文章**，包含引人入胜的开头、连贯的主体和有收尾的结局。
        - **绝对禁止**使用“1. 2. 3.”等列表格式，**绝对禁止**写成大纲、流水账或碎片化的草稿。
        - 所有的事件必须用优美的文学语言无缝串联。
        - 请使用中文进行写作。
@@ -806,15 +724,17 @@ def generate_stylized_text_stream(network, style, tone, author_context, target_w
     """
     
     try:
-        current_model = DEFAULT_MODEL_NAME
+        current_model = st.session_state.get('current_model', DEFAULT_MODEL_NAME)
         
         response = client.chat.completions.create(
             model=current_model,
             messages=[
-                {"role": "system", "content": "你是一位殿堂级小说家。你拒绝输出任何列表或大纲，只输出连贯、优美、充满细节的文学作品。"},
+                {"role": "system", "content": "你是一位殿堂级小说家。你拒绝输出任何列表或大纲，只输出连贯、优美、充满细节的文学作品。你绝不无意义地重复段落。"},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
+            temperature=0.8,
+            frequency_penalty=0.5,
+            presence_penalty=0.3,
             stream=True
         )
         for chunk in response:
@@ -850,8 +770,8 @@ def main():
         
         st.markdown('<h3 style="text-align: center; margin-bottom: 2rem; color: var(--text-secondary);">选择数据源开始溯源</h3>', unsafe_allow_html=True)
         
-        tab_text, tab_json, tab_jsonl, tab_random = st.tabs([
-            "📖 文本大纲", "✍️ 极速录入", "📁 数据集解析", "🧠 灵感大爆炸 (TNO/Galgame)"
+        tab_text, tab_json, tab_jsonl = st.tabs([
+            "📖 文本大纲", "✍️ 极速录入", "📁 数据集解析"
         ])
         
         with tab_text:
@@ -966,31 +886,6 @@ def main():
                         st.error("选中的记录不是有效的字典格式。")
                 except json.JSONDecodeError:
                     st.error("选中的记录不是有效的 JSON 格式。")
-                    
-        with tab_random:
-            category, complexity, theme, background, randomness, show_probability, submit_btn = ui_controller.render_random_generation_mode()
-            if submit_btn:
-                with st.status("🌌 正在从混沌中织造新的因果网络...", expanded=True) as status:
-                    st.write("配置大模型参数并随机采样世界线...")
-                    
-                    # 注入激活的流派库
-                    active_genre_id = st.session_state.get('active_genre_id')
-                    extended_bg = background
-                    if active_genre_id:
-                        g = genre_lib.get_genre_by_id(active_genre_id)
-                        if g:
-                             st.toast(f"随机生成将遵循 {g['name']} 特征库约束！", icon="📚")
-                             extended_bg = f"【流派核心设定: {g['name']}】\n{g.get('system_prompt', '')}\n【网络生成方向指导】: {g.get('network_prompt', '')}\n\n{background}"
-                             
-                    network_data = generate_random_event_network(category, complexity, theme, extended_bg, randomness, show_probability)
-                    if network_data:
-                        st.session_state['network'] = network_data
-                        status.update(label="随机事件网络生成并收敛完毕！", state="complete", expanded=False)
-                        st.balloons()
-                        time.sleep(1.5)
-                        st.rerun()
-                    else:
-                        status.update(label="生成失败", state="error")
 
     else:
         # 阶段 2：仪表盘与创作台
@@ -1004,8 +899,8 @@ def main():
         edges_count = len(st.session_state['network'].get('edges', []))
         
         col_m1, col_m2, col_m3, col_m4 = st.columns(4)
-        col_m1.metric("事件节点 (Nodes)", nodes_count)
-        col_m2.metric("关联边 (Edges)", edges_count)
+        col_m1.metric("事件节点", nodes_count)
+        col_m2.metric("关联边", edges_count)
         col_m3.metric("当前状态", "已生成故事" if st.session_state.get('story') else "待创作")
         with col_m4:
             st.write("")
@@ -1080,16 +975,7 @@ def main():
                         st.toast("⏪ 历史版本已恢复！", icon="✅")
                         st.session_state['restored_story_trigger'] = False
                         
-                    gen_prompts_clicked = ui_controller.render_story_tab(st.session_state.get('story'), st.session_state.get('image_prompts'))
-                    if gen_prompts_clicked:
-                        with st.status("🎨 正在提取视觉特征生成多模态提示词...", expanded=True) as status:
-                            prompts_data = generate_image_prompts(st.session_state['network'], style, tone, author_context)
-                            if prompts_data:
-                                st.session_state['image_prompts'] = prompts_data
-                                status.update(label="关键帧绘画提示词构建完成", state="complete", expanded=False)
-                                st.rerun()
-                            else:
-                                status.update(label="提示词构建失败", state="error")
+                    ui_controller.render_story_tab(st.session_state.get('story'))
                 else:
                     st.info("👈 请在左侧配置写作风格并点击“生成正文草稿”按钮。")
                     
